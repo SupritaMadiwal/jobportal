@@ -1,6 +1,12 @@
+import mongoose from "mongoose";
 import jobmodel from "../models/jobsmodel.js";
 import usermodel from "../models/usermodel.js";
-
+import {
+    fetchJobsFromAPI,
+    processJobWithAI,
+    saveJobToDB,
+    fetchProcessAndStoreJobs
+} from '../services/services.js'
 export const postjob = async(req, res) => {
     try {
         const adminid = req.params.adminid;
@@ -29,6 +35,7 @@ export const postjob = async(req, res) => {
     }
 }
 
+
 export const getalljobs = async(req, res) => {
     try {
         const jobs = await jobmodel.find();
@@ -53,86 +60,96 @@ export const getjobbyid = async(req, res) => {
         return res.status(500).json({ error: 'internal server error' + error.message });
     }
 }
+
+
+
 export const updatejob = async(req, res) => {
     try {
-        let jobid = req.params.jobid;
-        if (jobid || adminid) {
-            return res.status(400).json({ error: 'jobid is required' });
-        }
-
-        let updatedjob = await usermodel.findByIdAndUpdate(jobid, req.body); //old data not exist means null
-        if (!updatedjob) {
-            return res.status(404).json({ error: "job not found updated failed" })
-        }
-        return res.status(200).json({ message: "job updated successfully", job: updatedjob })
-    } catch (error) {
-        return res.status(500).json({ error: "internal server error" + error })
-        return res.status(200).json({ message: "job updated successfully", job: updatedjob })
-    }
-
-}
-export const updateadmin = async(req, res) => {
-    try {
+        let jobid = req.params.id;
         let adminid = req.params.adminid;
-        if (!adminid) {
-            return res.status(400).json({ error: 'adminid is required' });
+        if (!jobid || !adminid) {
+            return res.status(400).json({ error: "id,adminid missing in params" })
         }
-        let updatedadmin = await usermodel.findByIdAndUpdate(adminid, req.body); //old data not exist means null
-        if (!updatedadmin) {
-            return res.status(404).json({ error: "admin not found updated failed" })
+        //how is admin or not
+        let userdetails = await usermodel.findById(adminid); //null
+        if (!userdetails) {
+            return res.status(404).json({ error: "user not found" })
         }
-        return res.status(200).json({ message: "admin updated successfully", admin: updateduser })
+        if (userdetails.isadmin !== true) {
+            return res.status(400).json({ error: "only admin can update jobs" })
+        }
+
+        //this admin and how posted that  particular job,we have to both or same or not 
+        let jobdetails = await jobmodel.findById(jobid);
+        if (!jobdetails) {
+            return res.status(404).json({ error: "job not found" })
+        }
+
+        if (jobdetails.userid._id.toString() !== adminid) {
+            return res.status(400).json({ error: "only admin  how posted that have access" })
+        }
+        let updatedjob = await jobmodel.findByIdAndUpdate(jobid, req.body); //old data not exist means null
+        return res.status(200).json({ message: "job updated successfully", job: updatedjob })
     } catch (error) {
-        return res.status(500).json({ error: "internal server error" + error })
+        return res.status(500).json({ error: 'internal server error' + error.message });
     }
 }
+
 export const deletejob = async(req, res) => {
     try {
-        const deletejob = req.params.jobid;
-        if (jobid || adminid) {
-            return res.status(400).json({ error: 'job is required' });
+        let jobid = req.params.id;
+        let adminid = req.params.adminid;
+        if (!jobid || !adminid) {
+            return res.status(400).json({ error: "id,adminid missing in params" })
         }
-        let deletedjob = await jobmodel.findByIdAndDelete(id);
-        if (!deletedjob || adminid) {
-            return res.status(404).json({ error: "job not found deleted failed" })
+        //how is admin or not
+        let userdetails = await usermodel.findById(adminid); //null
+        if (!userdetails) {
+            return res.status(404).json({ error: "user not found" })
+        }
+        if (userdetails.isadmin !== true) {
+            return res.status(400).json({ error: "only admin can update jobs" })
         }
 
-        return res.status(200).json({ message: "job deleted successfully", user: deletedjob })
+        //this admin and how posted that  particular job,we have to both or same or not 
+        let jobdetails = await jobmodel.findById(jobid);
+        if (!jobdetails) {
+            return res.status(404).json({ error: "job not found" })
+        }
+
+        if (jobdetails.userid._id.toString() !== adminid) {
+            return res.status(400).json({ error: "only admin  how posted that have access" })
+        }
+        let daletedjob = await jobmodel.findByIdAndDelete(jobid); //old data not exist means null
+        return res.status(200).json({ message: "job deleted successfully", job: daletedjob })
     } catch (error) {
-        return res.status(400).json({ error: "internal server error" + error })
+        return res.status(500).json({ error: 'internal server error' + error.message });
     }
 }
-export const updatedjob = async(req, res) => {
+
+
+// In your controller
+export const importJobs = async(req, res) => {
     try {
-        let jobid = req.params.jobid;
-        if (jobid || adminid) {
-            return res.status(400).json({ error: 'jobid is required' });
+        const results = await fetchProcessAndStoreJobs('6889ee4896956f2ca0c9a512');
+
+        if (results.every(r => !r.success)) {
+            return res.status(400).json({
+                success: false,
+                message: 'All jobs failed to process',
+                results
+            });
         }
 
-        let updatedjob = await usermodel.findByIdAndUpdate(jobid, req.body); //old data not exist means null
-        if (!updatedjob) {
-            return res.status(404).json({ error: "job not found updated failed" })
-        }
-        return res.status(200).json({ message: "job updated successfully", job: updatedjob })
+        res.json({
+            success: true,
+            results
+        });
     } catch (error) {
-        return res.status(500).json({ error: "internal server error" + error })
-        return res.status(200).json({ message: "job updated successfully", job: updatedjob })
-    }
-
-}
-
-
-exports.deletejob = async(req, res) => {
-    try {
-        const id = req.paramas.id;
-        const deletedjob = await jobmodel.findByIdAndDelete(id);
-        if (!deletedjob) {
-            return res.status(200).json({ error: "job not found" });
-
-        }
-        return res.status(200).json({ message: "job deleted successfully" });
-    } catch (error) {
-        console.error('error deleting job:', error);
-        return res.status(500)({ error: "interal server error" });
+        console.error('Import jobs error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message || 'Job import failed'
+        });
     }
 };
